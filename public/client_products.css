@@ -1,0 +1,93 @@
+.client-products-body {
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    margin: 0;
+    background: #f5f8ff;
+    color: #1b2740;
+}
+
+.client-products-main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 2rem 1rem 3rem;
+}
+
+.client-products-header {
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+    margin-bottom: 1.5rem;
+}
+
+.client-logout {
+    width: fit-content;
+    background: #1f5eff;
+    color: #fff;
+    text-decoration: none;
+    padding: .6rem 1rem;
+    border-radius: 8px;
+}
+
+.product-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.product-card,
+.client-form-section,
+.client-orders {
+    background: #fff;
+    border-radius: 12px;
+    padding: 1rem;
+    box-shadow: 0 8px 20px rgba(20, 35, 90, 0.08);
+}
+
+.client-form-section form {
+    display: grid;
+    gap: .6rem;
+}
+
+.client-form-section input,
+.client-form-section select,
+.client-form-section button {
+    padding: .65rem;
+    border-radius: 8px;
+    border: 1px solid #cfd7e8;
+    font-size: .95rem;
+}
+
+.client-form-section button {
+    background: #1f5eff;
+    color: #fff;
+    border: none;
+    cursor: pointer;
+}
+
+.client-alert {
+    border-radius: 8px;
+    padding: .7rem .9rem;
+    margin-bottom: 1rem;
+}
+
+.client-alert--success {
+    background: #e7f8ee;
+    color: #116f3a;
+}
+
+.client-alert--error {
+    background: #ffe8e8;
+    color: #9f2020;
+}
+
+.client-orders table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.client-orders th,
+.client-orders td {
+    text-align: left;
+    padding: .6rem;
+    border-bottom: 1px solid #edf1fa;
+}

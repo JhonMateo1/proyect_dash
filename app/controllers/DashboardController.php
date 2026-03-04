@@ -5,13 +5,27 @@ require_once MODEL_PATH . '/AuditModel.php';
 
 class DashboardController
 {
-    private function isNonGmailUser()
+    private function isGmailUser()
     {
         $email = (string)($_SESSION['user_id'] ?? '');
         $parts = explode('@', $email);
         $domain = strtolower(trim($parts[1] ?? ''));
 
-        return $domain !== '' && $domain !== 'gmail.com';
+        return $domain === 'gmail.com';
+    }
+
+    private function enforceCorporateAccess()
+    {
+        if ($this->isGmailUser()) {
+            redirect(route('dashboard', 'productsLanding'));
+        }
+    }
+
+    private function enforceClientAccess()
+    {
+        if (!$this->isGmailUser()) {
+            redirect(route('dashboard', 'index'));
+        }
     }
 
     private function nextVentaId($ventas)
@@ -141,6 +155,7 @@ class DashboardController
     {
         authRequired();
         $this->enforcePasswordUpdated();
+        $this->enforceCorporateAccess();
 
         $email = $_SESSION['user_id'];
 
@@ -196,6 +211,7 @@ class DashboardController
     {
         authRequired();
         $this->enforcePasswordUpdated();
+        $this->enforceCorporateAccess();
         require VIEW_PATH . '/add_employee.php';
     }
 
@@ -203,6 +219,7 @@ class DashboardController
     {
         authRequired();
         $this->enforcePasswordUpdated();
+        $this->enforceCorporateAccess();
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             redirect(route('dashboard', 'index'));
@@ -245,6 +262,7 @@ class DashboardController
     {
         authRequired();
         $this->enforcePasswordUpdated();
+        $this->enforceCorporateAccess();
 
         $auditModel = new AuditModel();
         $logs = json_decode(file_get_contents(DATA_PATH . '/audit.json'), true);
@@ -256,6 +274,7 @@ class DashboardController
     {
         authRequired();
         $this->enforcePasswordUpdated();
+        $this->enforceCorporateAccess();
 
         $ventas = $this->loadVentas();
 
@@ -337,13 +356,70 @@ class DashboardController
 
     public function productsLanding()
     {
-        $this->index();
+        authRequired();
+        $this->enforcePasswordUpdated();
+        $this->enforceClientAccess();
+
+        $ventas = $this->loadVentas();
+        $clienteEmail = (string)($_SESSION['user_id'] ?? '');
+        $misPedidos = array_values(array_filter($ventas, function ($venta) use ($clienteEmail) {
+            return trim((string)($venta['cliente_email'] ?? '')) === $clienteEmail;
+        }));
+
+        require VIEW_PATH . '/client_products.php';
+    }
+
+    public function buyProduct()
+    {
+        authRequired();
+        $this->enforcePasswordUpdated();
+        $this->enforceClientAccess();
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            redirect(route('dashboard', 'productsLanding'));
+        }
+
+        $productos = [
+            'Laptop Pro 14' => 4200.00,
+            'Mouse Inalámbrico' => 90.00,
+            'Teclado Mecánico' => 250.00,
+            'Monitor 27"' => 980.00,
+        ];
+
+        $producto = trim($_POST['producto'] ?? '');
+        $cantidad = (int)($_POST['cantidad'] ?? 1);
+        $clienteNombre = trim($_POST['cliente_nombre'] ?? '');
+
+        if (!isset($productos[$producto]) || $cantidad <= 0 || $clienteNombre === '') {
+            $_SESSION['client_products_error'] = 'No se pudo registrar la compra. Verifica los datos enviados.';
+            redirect(route('dashboard', 'productsLanding'));
+        }
+
+        $ventas = $this->loadVentas();
+        $precioUnitario = (float)$productos[$producto];
+        $total = $precioUnitario * $cantidad;
+
+        $ventas[] = [
+            'id' => $this->nextVentaId($ventas),
+            'cliente' => $clienteNombre,
+            'cliente_email' => (string)($_SESSION['user_id'] ?? ''),
+            'producto' => $producto,
+            'cantidad' => $cantidad,
+            'total' => $total,
+            'fecha' => date('Y-m-d H:i:s'),
+            'origen' => 'portal_clientes',
+        ];
+
+        $this->saveVentas($ventas);
+        $_SESSION['client_products_success'] = 'Compra registrada correctamente.';
+        redirect(route('dashboard', 'productsLanding'));
     }
 
     public function viewEmployee()
     {
         authRequired();
         $this->enforcePasswordUpdated();
+        $this->enforceCorporateAccess();
 
         $id = trim($_GET['id'] ?? '');
         
@@ -377,6 +453,7 @@ class DashboardController
     {
         authRequired();
         $this->enforcePasswordUpdated();
+        $this->enforceCorporateAccess();
 
         $id = trim($_GET['id'] ?? '');
         
@@ -398,6 +475,7 @@ class DashboardController
     {
         authRequired();
         $this->enforcePasswordUpdated();
+        $this->enforceCorporateAccess();
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             redirect(route('dashboard', 'index'));

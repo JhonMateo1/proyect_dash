@@ -1,8 +1,8 @@
 diff --git a/app/controllers/AuthController.php b/app/controllers/AuthController.php
-index 5b7cc5f773205894d939f039577b08a9b0a7ac9e..7ab6a69faab4bbcfa92aeb647d0c5099dd677efc 100644
+index 7ab6a69faab4bbcfa92aeb647d0c5099dd677efc..e916f8fadbeafab6663bd63e8197101d63ad2410 100644
 --- a/app/controllers/AuthController.php
 +++ b/app/controllers/AuthController.php
-@@ -1,34 +1,42 @@
+@@ -1,40 +1,40 @@
  <?php
  
  require_once MODEL_PATH . '/AuditModel.php';
@@ -12,14 +12,16 @@ index 5b7cc5f773205894d939f039577b08a9b0a7ac9e..7ab6a69faab4bbcfa92aeb647d0c5099
  
  class AuthController
  {
-+    private function isNonGmailEmail($email)
-+    {
-+        $parts = explode('@', (string)$email);
-+        $domain = strtolower(trim($parts[1] ?? ''));
-+
-+        return $domain !== 'gmail.com';
-+    }
-+
+-    private function isNonGmailEmail($email)
++    private function isGmailEmail($email)
+     {
+         $parts = explode('@', (string)$email);
+         $domain = strtolower(trim($parts[1] ?? ''));
+ 
+-        return $domain !== 'gmail.com';
++        return $domain === 'gmail.com';
+     }
+ 
      private function isPasswordValidForUser($plainPassword, $storedPassword)
      {
          if ($storedPassword === null || $storedPassword === '') {
@@ -43,9 +45,7 @@ index 5b7cc5f773205894d939f039577b08a9b0a7ac9e..7ab6a69faab4bbcfa92aeb647d0c5099
              'special' => (bool)preg_match('/[^A-Za-z0-9]/', $password),
          ];
      }
- 
-     public function login()
-@@ -78,59 +86,64 @@ class AuthController
+@@ -86,61 +86,61 @@ class AuthController
  
      public function verifyOTP()
      {
@@ -71,7 +71,8 @@ index 5b7cc5f773205894d939f039577b08a9b0a7ac9e..7ab6a69faab4bbcfa92aeb647d0c5099
          $audit->log('EVENT_LOGIN', $email, 'Login exitoso');
  
          $_SESSION['user_id'] = $email;
-+        $_SESSION['is_non_gmail_user'] = $this->isNonGmailEmail($email);
+-        $_SESSION['is_non_gmail_user'] = $this->isNonGmailEmail($email);
++        $_SESSION['is_gmail_user'] = $this->isGmailEmail($email);
          unset($_SESSION['otp_email']);
  
          $userModel = new UserModel();
@@ -81,10 +82,11 @@ index 5b7cc5f773205894d939f039577b08a9b0a7ac9e..7ab6a69faab4bbcfa92aeb647d0c5099
              redirect(route('auth', 'changePasswordRequired'));
          }
  
-+        if (!empty($_SESSION['is_non_gmail_user'])) {
-+            redirect(route('dashboard', 'productsLanding'));
-+        }
-+
+-        if (!empty($_SESSION['is_non_gmail_user'])) {
++        if (!empty($_SESSION['is_gmail_user'])) {
+             redirect(route('dashboard', 'productsLanding'));
+         }
+ 
          redirect(route('dashboard', 'index'));
      }
  
@@ -107,14 +109,11 @@ index 5b7cc5f773205894d939f039577b08a9b0a7ac9e..7ab6a69faab4bbcfa92aeb647d0c5099
      {
          authRequired();
  
-         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-             redirect(route('auth', 'changePasswordRequired'));
-         }
 diff --git a/app/controllers/DashboardController.php b/app/controllers/DashboardController.php
-index 3950dcd9b8f356df72c0d13b3d7ec9cec6abee34..de7e2f1ad45672666ce0bbd43ba9f9f2be21c205 100644
+index 5b116c5121ba5dcf334a9706867519d1bd84febb..34443370c69dd919fae670a4408fb720036e7a72 100644
 --- a/app/controllers/DashboardController.php
 +++ b/app/controllers/DashboardController.php
-@@ -1,32 +1,55 @@
+@@ -1,39 +1,53 @@
  <?php
  
  require_once MODEL_PATH . '/UserModel.php';
@@ -122,29 +121,45 @@ index 3950dcd9b8f356df72c0d13b3d7ec9cec6abee34..de7e2f1ad45672666ce0bbd43ba9f9f2
  
  class DashboardController
  {
-+    private function isNonGmailUser()
-+    {
-+        $email = (string)($_SESSION['user_id'] ?? '');
-+        $parts = explode('@', $email);
-+        $domain = strtolower(trim($parts[1] ?? ''));
-+
-+        return $domain !== '' && $domain !== 'gmail.com';
+-    private function isNonGmailUser()
++    private function isGmailUser()
+     {
+         $email = (string)($_SESSION['user_id'] ?? '');
+         $parts = explode('@', $email);
+         $domain = strtolower(trim($parts[1] ?? ''));
+ 
+-        return $domain !== '' && $domain !== 'gmail.com';
++        return $domain === 'gmail.com';
 +    }
 +
-+    private function nextVentaId($ventas)
++    private function enforceCorporateAccess()
 +    {
-+        $maxId = 0;
-+
-+        foreach ($ventas as $venta) {
-+            $id = (int)($venta['id'] ?? 0);
-+            if ($id > $maxId) {
-+                $maxId = $id;
-+            }
++        if ($this->isGmailUser()) {
++            redirect(route('dashboard', 'productsLanding'));
 +        }
-+
-+        return $maxId + 1;
 +    }
 +
++    private function enforceClientAccess()
++    {
++        if (!$this->isGmailUser()) {
++            redirect(route('dashboard', 'index'));
++        }
+     }
+ 
+     private function nextVentaId($ventas)
+     {
+         $maxId = 0;
+ 
+         foreach ($ventas as $venta) {
+             $id = (int)($venta['id'] ?? 0);
+             if ($id > $maxId) {
+                 $maxId = $id;
+             }
+         }
+ 
+         return $maxId + 1;
+     }
+ 
      private function ventasFilePath()
      {
          return DATA_PATH . '/ventas.json';
@@ -154,23 +169,8 @@ index 3950dcd9b8f356df72c0d13b3d7ec9cec6abee34..de7e2f1ad45672666ce0bbd43ba9f9f2
      {
          $ventasFile = $this->ventasFilePath();
          if (!file_exists($ventasFile)) {
-             file_put_contents($ventasFile, json_encode([], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-         }
- 
-         return json_decode(file_get_contents($ventasFile), true) ?? [];
-     }
- 
-     private function saveVentas($ventas)
-     {
-         file_put_contents(
-             $this->ventasFilePath(),
-             json_encode(array_values($ventas), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
-         );
-     }
- 
-     private function processProfilePhotoUpload()
-     {
-@@ -97,50 +120,54 @@ class DashboardController
+@@ -119,50 +133,51 @@ class DashboardController
+         $upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
          $digits = '0123456789';
          $special = '!@#$%^&*';
  
@@ -195,11 +195,8 @@ index 3950dcd9b8f356df72c0d13b3d7ec9cec6abee34..de7e2f1ad45672666ce0bbd43ba9f9f2
      {
          authRequired();
          $this->enforcePasswordUpdated();
++        $this->enforceCorporateAccess();
  
-+        if ($this->isNonGmailUser()) {
-+            redirect(route('dashboard', 'productsLanding'));
-+        }
-+
          $email = $_SESSION['user_id'];
  
          $userModel = new UserModel();
@@ -224,8 +221,72 @@ index 3950dcd9b8f356df72c0d13b3d7ec9cec6abee34..de7e2f1ad45672666ce0bbd43ba9f9f2
                  foreach (['name', 'email', 'position'] as $field) {
                      if (!empty($u[$field]) && mb_strpos(mb_strtolower($u[$field]), $needle) !== false) {
                          $found = true;
-                         break;
-@@ -214,91 +241,138 @@ class DashboardController
+@@ -174,110 +189,114 @@ class DashboardController
+ 
+             // filtro por tipo
+             if (!empty($typeFilter)) {
+                 $uType = trim($u['type'] ?? '');
+                 if ($uType !== $typeFilter) continue;
+             }
+ 
+             // filtro por estado
+             if (!empty($statusFilter)) {
+                 $uStatus = trim($u['status'] ?? '');
+                 if ($uStatus !== $statusFilter) continue;
+             }
+ 
+             $allUsers[] = $u;
+         }
+ 
+         // 3. Cargar vista
+         require VIEW_PATH . '/dashboard.php';
+     }
+ 
+ 
+     public function addEmployee()
+     {
+         authRequired();
+         $this->enforcePasswordUpdated();
++        $this->enforceCorporateAccess();
+         require VIEW_PATH . '/add_employee.php';
+     }
+ 
+     public function saveEmployee()
+     {
+         authRequired();
+         $this->enforcePasswordUpdated();
++        $this->enforceCorporateAccess();
+ 
+         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+             redirect(route('dashboard', 'index'));
+         }
+ 
+         $payload = [];
+         $payload['full_name'] = trim($_POST['full_name'] ?? '');
+         $payload['email'] = trim($_POST['email'] ?? '');
+         $payload['phone'] = trim($_POST['phone'] ?? '');
+         $payload['type'] = trim($_POST['type'] ?? '');
+         $payload['department'] = trim($_POST['department'] ?? '');
+         $payload['position'] = trim($_POST['position'] ?? '');
+         $payload['hired_at'] = trim($_POST['hired_at'] ?? '');
+         $payload['status'] = trim($_POST['status'] ?? '');
+         $payload['password'] = $this->generateTemporaryPassword();
+         $payload['must_change_password'] = true;
+         $payload['photo_url'] = $this->processProfilePhotoUpload();
+ 
+         $userModel = new UserModel();
+         $userModel->create($payload);
+ 
+         $baseMessage = 'Empleado creado exitosamente. Contraseña temporal: ' . $payload['password'] . '. Guarde esta información.';
+         if (!empty($_SESSION['employee_error_message'])) {
+             $_SESSION['employee_temp_password_message'] = $baseMessage . ' (La foto no pudo guardarse: ' . $_SESSION['employee_error_message'] . ')';
+             unset($_SESSION['employee_error_message']);
+         } else {
+             $_SESSION['employee_temp_password_message'] = $baseMessage;
+         }
+ 
+         redirect(route('dashboard', 'addEmployee'));
+     }
  
      public function logout()
      {
@@ -237,6 +298,7 @@ index 3950dcd9b8f356df72c0d13b3d7ec9cec6abee34..de7e2f1ad45672666ce0bbd43ba9f9f2
      {
          authRequired();
          $this->enforcePasswordUpdated();
++        $this->enforceCorporateAccess();
  
          $auditModel = new AuditModel();
          $logs = json_decode(file_get_contents(DATA_PATH . '/audit.json'), true);
@@ -248,18 +310,19 @@ index 3950dcd9b8f356df72c0d13b3d7ec9cec6abee34..de7e2f1ad45672666ce0bbd43ba9f9f2
      {
          authRequired();
          $this->enforcePasswordUpdated();
++        $this->enforceCorporateAccess();
  
          $ventas = $this->loadVentas();
  
-+        $normalizedVentas = [];
-+        foreach ($ventas as $index => $venta) {
-+            $venta['id'] = $index + 1;
-+            $normalizedVentas[] = $venta;
-+        }
-+
-+        $ventas = $normalizedVentas;
-+        $this->saveVentas($ventas);
-+
+         $normalizedVentas = [];
+         foreach ($ventas as $index => $venta) {
+             $venta['id'] = $index + 1;
+             $normalizedVentas[] = $venta;
+         }
+ 
+         $ventas = $normalizedVentas;
+         $this->saveVentas($ventas);
+ 
          if ($_SERVER['REQUEST_METHOD'] === 'POST') {
              $operation = trim($_POST['operation'] ?? 'create');
  
@@ -270,50 +333,17 @@ index 3950dcd9b8f356df72c0d13b3d7ec9cec6abee34..de7e2f1ad45672666ce0bbd43ba9f9f2
  
                  if ($cliente !== '' && $producto !== '' && $total > 0) {
                      $ventas[] = [
--                        'id' => uniqid('vta_', true),
-+                        'id' => $this->nextVentaId($ventas),
+                         'id' => $this->nextVentaId($ventas),
                          'cliente' => $cliente,
                          'producto' => $producto,
-                         'total' => $total,
-                         'fecha' => date('Y-m-d H:i:s'),
-                     ];
-                     $this->saveVentas($ventas);
-                 }
-             }
- 
-+            if ($operation === 'update') {
-+                $ventaId = (int)($_POST['venta_id'] ?? 0);
-+                $cliente = trim($_POST['cliente'] ?? '');
-+                $producto = trim($_POST['producto'] ?? '');
-+                $total = (float) ($_POST['total'] ?? 0);
-+
-+                if ($ventaId > 0 && $cliente !== '' && $producto !== '' && $total > 0) {
-+                    foreach ($ventas as &$venta) {
-+                        if ((int)($venta['id'] ?? 0) === $ventaId) {
-+                            $venta['cliente'] = $cliente;
-+                            $venta['producto'] = $producto;
-+                            $venta['total'] = $total;
-+                            break;
-+                        }
-+                    }
-+                    unset($venta);
-+                    $this->saveVentas($ventas);
-+                }
-+            }
-+
-             if ($operation === 'delete') {
--                $ventaId = trim($_POST['venta_id'] ?? '');
-+                $ventaId = (int)($_POST['venta_id'] ?? 0);
-                 $ventas = array_filter($ventas, function ($venta) use ($ventaId) {
--                    return ($venta['id'] ?? '') !== $ventaId;
-+                    return (int)($venta['id'] ?? 0) !== $ventaId;
+@@ -315,111 +334,170 @@ class DashboardController
                  });
-+
-+                $ventas = array_values($ventas);
-+                foreach ($ventas as $index => &$venta) {
-+                    $venta['id'] = $index + 1;
-+                }
-+                unset($venta);
+ 
+                 $ventas = array_values($ventas);
+                 foreach ($ventas as $index => &$venta) {
+                     $venta['id'] = $index + 1;
+                 }
+                 unset($venta);
                  $this->saveVentas($ventas);
              }
  
@@ -330,22 +360,73 @@ index 3950dcd9b8f356df72c0d13b3d7ec9cec6abee34..de7e2f1ad45672666ce0bbd43ba9f9f2
          require VIEW_PATH . '/page_ventas.php';
      }
  
-+    public function productsLanding()
+     public function productsLanding()
+     {
+-        $this->index();
++        authRequired();
++        $this->enforcePasswordUpdated();
++        $this->enforceClientAccess();
++
++        $ventas = $this->loadVentas();
++        $clienteEmail = (string)($_SESSION['user_id'] ?? '');
++        $misPedidos = array_values(array_filter($ventas, function ($venta) use ($clienteEmail) {
++            return trim((string)($venta['cliente_email'] ?? '')) === $clienteEmail;
++        }));
++
++        require VIEW_PATH . '/client_products.php';
++    }
++
++    public function buyProduct()
 +    {
 +        authRequired();
 +        $this->enforcePasswordUpdated();
++        $this->enforceClientAccess();
 +
-+        if (!$this->isNonGmailUser()) {
-+            redirect(route('dashboard', 'index'));
++        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
++            redirect(route('dashboard', 'productsLanding'));
 +        }
 +
-+        require VIEW_PATH . '/products_landing.php';
-+    }
++        $productos = [
++            'Laptop Pro 14' => 4200.00,
++            'Mouse Inalámbrico' => 90.00,
++            'Teclado Mecánico' => 250.00,
++            'Monitor 27"' => 980.00,
++        ];
 +
++        $producto = trim($_POST['producto'] ?? '');
++        $cantidad = (int)($_POST['cantidad'] ?? 1);
++        $clienteNombre = trim($_POST['cliente_nombre'] ?? '');
++
++        if (!isset($productos[$producto]) || $cantidad <= 0 || $clienteNombre === '') {
++            $_SESSION['client_products_error'] = 'No se pudo registrar la compra. Verifica los datos enviados.';
++            redirect(route('dashboard', 'productsLanding'));
++        }
++
++        $ventas = $this->loadVentas();
++        $precioUnitario = (float)$productos[$producto];
++        $total = $precioUnitario * $cantidad;
++
++        $ventas[] = [
++            'id' => $this->nextVentaId($ventas),
++            'cliente' => $clienteNombre,
++            'cliente_email' => (string)($_SESSION['user_id'] ?? ''),
++            'producto' => $producto,
++            'cantidad' => $cantidad,
++            'total' => $total,
++            'fecha' => date('Y-m-d H:i:s'),
++            'origen' => 'portal_clientes',
++        ];
++
++        $this->saveVentas($ventas);
++        $_SESSION['client_products_success'] = 'Compra registrada correctamente.';
++        redirect(route('dashboard', 'productsLanding'));
+     }
+ 
      public function viewEmployee()
      {
          authRequired();
          $this->enforcePasswordUpdated();
++        $this->enforceCorporateAccess();
  
          $id = trim($_GET['id'] ?? '');
          
@@ -367,392 +448,272 @@ index 3950dcd9b8f356df72c0d13b3d7ec9cec6abee34..de7e2f1ad45672666ce0bbd43ba9f9f2
                  break;
              }
          }
-diff --git a/app/views/page_ventas.php b/app/views/page_ventas.php
-index 39e5e42eeea8b5817a2f1fff206c13b50e35a7d5..300e8a2235e80724f428ce625166360469fa552e 100644
---- a/app/views/page_ventas.php
-+++ b/app/views/page_ventas.php
-@@ -29,120 +29,224 @@
  
-     <main class="dashboard-main">
-         <section class="panel panel--wide hr-panel hr-panel--fullscreen">
-             <h1>Módulo de Ventas</h1>
- 
-             <div class="module-headline">
-                 <h2>Gestión Comercial</h2>
-                 <p>Registro de ventas y métricas generales del módulo</p>
-             </div>
- 
-             <div class="stats-grid" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
-                 <article class="stat-card">
-                     <h4>Total Ventas</h4>
-                     <p class="stat-value">$<?= number_format($totalMonto ?? 0, 2) ?></p>
-                     <small>Monto acumulado</small>
-                 </article>
-                 <article class="stat-card">
-                     <h4>N° Ventas</h4>
-                     <p class="stat-value"><?= (int) ($cantidadVentas ?? 0) ?></p>
-                     <small>Transacciones registradas</small>
-                 </article>
-             </div>
- 
-             <div class="module-header">
-                 <div>
--                    <h3>Nueva venta</h3>
--                    <p class="subtitle">Completa los datos para registrar una operación</p>
-+                    <h3>Ventas registradas</h3>
-+                    <p class="subtitle">Ahora puedes agregar, ver y editar ventas desde modales</p>
-                 </div>
-+                <button class="btn-primary btn-inline" type="button" data-open-modal="createVentaModal">Agregar nueva venta</button>
-             </div>
- 
--            <form class="filter-row" method="post" action="<?= route('dashboard', 'page_ventas') ?>" style="grid-template-columns: 1fr 1fr 1fr auto; align-items: end;">
--                <input type="hidden" name="operation" value="create">
--                <input type="text" name="cliente" placeholder="Cliente" required>
--                <input type="text" name="producto" placeholder="Producto" required>
--                <input type="number" name="total" placeholder="Total" min="0.01" step="0.01" required>
--                <button class="btn-primary btn-inline" type="submit">Agregar venta</button>
--            </form>
--
-             <div class="table-wrap table-wrap--dashboard">
-                 <table class="audit-table dashboard-table">
-                     <thead>
-                     <tr>
-                         <th>ID</th>
-                         <th>Cliente</th>
-                         <th>Producto</th>
-                         <th>Total</th>
-                         <th>Fecha</th>
-                         <th>Acciones</th>
-                     </tr>
-                     </thead>
-                     <tbody>
-                     <?php if (empty($ventas ?? [])): ?>
-                         <tr>
-                             <td colspan="6">No hay ventas registradas.</td>
-                         </tr>
-                     <?php else: ?>
-                         <?php foreach (($ventas ?? []) as $venta): ?>
-                             <tr>
--                                <td><?= htmlspecialchars($venta['id'] ?? '') ?></td>
-+                                <td><?= (int) ($venta['id'] ?? 0) ?></td>
-                                 <td><?= htmlspecialchars($venta['cliente'] ?? '') ?></td>
-                                 <td><?= htmlspecialchars($venta['producto'] ?? '') ?></td>
-                                 <td>$<?= number_format((float) ($venta['total'] ?? 0), 2) ?></td>
-                                 <td><?= htmlspecialchars($venta['fecha'] ?? '-') ?></td>
-                                 <td>
-+                                    <button class="btn-secondary btn-inline" type="button"
-+                                            data-open-modal="viewVentaModal"
-+                                            data-venta='<?= json_encode($venta, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>'>Ver</button>
-+                                    <button class="btn-primary btn-inline" type="button"
-+                                            data-open-modal="editVentaModal"
-+                                            data-venta='<?= json_encode($venta, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>'>Editar</button>
-                                     <form method="post" action="<?= route('dashboard', 'page_ventas') ?>" style="display:inline;">
-                                         <input type="hidden" name="operation" value="delete">
--                                        <input type="hidden" name="venta_id" value="<?= htmlspecialchars($venta['id'] ?? '') ?>">
-+                                        <input type="hidden" name="venta_id" value="<?= (int) ($venta['id'] ?? 0) ?>">
-                                         <button class="btn-secondary btn-inline" type="submit">Eliminar</button>
-                                     </form>
-                                 </td>
-                             </tr>
-                         <?php endforeach; ?>
-                     <?php endif; ?>
-                     </tbody>
-                 </table>
-             </div>
- 
-             <div class="panel" style="width:100%; max-width:100%; margin-top:16px; padding:18px;">
-                 <h3 style="margin-top:0;">Panel analítico</h3>
-                 <canvas id="graficoVentas" height="120"></canvas>
-             </div>
-         </section>
-     </main>
- </div>
- 
-+<div class="custom-modal" id="createVentaModal" aria-hidden="true">
-+    <div class="custom-modal__box">
-+        <div class="custom-modal__head">
-+            <h3>Agregar nueva venta</h3>
-+            <button type="button" class="custom-modal__close" data-close-modal>&times;</button>
-+        </div>
-+        <form class="form-grid" method="post" action="<?= route('dashboard', 'page_ventas') ?>">
-+            <input type="hidden" name="operation" value="create">
-+            <div class="field"><label>Cliente</label><input type="text" name="cliente" required></div>
-+            <div class="field"><label>Producto</label><input type="text" name="producto" required></div>
-+            <div class="field"><label>Total</label><input type="number" name="total" min="0.01" step="0.01" required></div>
-+            <button class="btn-primary" type="submit">Guardar venta</button>
-+        </form>
-+    </div>
-+</div>
-+
-+<div class="custom-modal" id="viewVentaModal" aria-hidden="true">
-+    <div class="custom-modal__box">
-+        <div class="custom-modal__head">
-+            <h3>Detalle de venta</h3>
-+            <button type="button" class="custom-modal__close" data-close-modal>&times;</button>
-+        </div>
-+        <ul class="info-list">
-+            <li><strong>ID:</strong> <span data-view="id"></span></li>
-+            <li><strong>Cliente:</strong> <span data-view="cliente"></span></li>
-+            <li><strong>Producto:</strong> <span data-view="producto"></span></li>
-+            <li><strong>Total:</strong> <span data-view="total"></span></li>
-+            <li><strong>Fecha:</strong> <span data-view="fecha"></span></li>
-+        </ul>
-+    </div>
-+</div>
-+
-+<div class="custom-modal" id="editVentaModal" aria-hidden="true">
-+    <div class="custom-modal__box">
-+        <div class="custom-modal__head">
-+            <h3>Editar venta</h3>
-+            <button type="button" class="custom-modal__close" data-close-modal>&times;</button>
-+        </div>
-+        <form class="form-grid" method="post" action="<?= route('dashboard', 'page_ventas') ?>">
-+            <input type="hidden" name="operation" value="update">
-+            <input type="hidden" name="venta_id" id="editVentaId">
-+            <div class="field"><label>Cliente</label><input type="text" name="cliente" id="editCliente" required></div>
-+            <div class="field"><label>Producto</label><input type="text" name="producto" id="editProducto" required></div>
-+            <div class="field"><label>Total</label><input type="number" name="total" id="editTotal" min="0.01" step="0.01" required></div>
-+            <button class="btn-primary" type="submit">Actualizar venta</button>
-+        </form>
-+    </div>
-+</div>
-+
- <script>
- const ventasData = <?= json_encode($ventas ?? [], JSON_UNESCAPED_UNICODE) ?>;
- const etiquetas = ventasData.map(v => v.producto || 'Producto');
- const montos = ventasData.map(v => Number(v.total || 0));
- 
- const ctx = document.getElementById('graficoVentas');
- new Chart(ctx, {
-     type: 'bar',
-     data: {
-         labels: etiquetas,
-         datasets: [{
-             label: 'Ventas por producto',
-             data: montos,
-             backgroundColor: 'rgba(92, 160, 255, 0.45)',
-             borderColor: 'rgba(92, 160, 255, 1)',
-             borderWidth: 1
-         }]
-     },
-     options: {
-         responsive: true,
-         plugins: {
-             legend: {
-                 labels: { color: '#dce8ff' }
-             }
-         },
-         scales: {
-             x: { ticks: { color: '#bcd1f5' } },
-             y: { ticks: { color: '#bcd1f5' } }
+         if (!$user) {
+             redirect(route('dashboard', 'index'));
          }
-     }
- });
-+
-+const modals = document.querySelectorAll('.custom-modal');
-+const openButtons = document.querySelectorAll('[data-open-modal]');
-+const closeButtons = document.querySelectorAll('[data-close-modal]');
-+
-+function openModal(id) {
-+    const modal = document.getElementById(id);
-+    if (!modal) return;
-+    modal.classList.add('is-open');
-+    modal.setAttribute('aria-hidden', 'false');
-+}
-+
-+function closeModal(modal) {
-+    modal.classList.remove('is-open');
-+    modal.setAttribute('aria-hidden', 'true');
-+}
-+
-+openButtons.forEach((button) => {
-+    button.addEventListener('click', () => {
-+        const targetId = button.getAttribute('data-open-modal');
-+        const ventaRaw = button.getAttribute('data-venta');
-+        const venta = ventaRaw ? JSON.parse(ventaRaw) : null;
-+
-+        if (targetId === 'viewVentaModal' && venta) {
-+            document.querySelector('[data-view="id"]').textContent = venta.id ?? '-';
-+            document.querySelector('[data-view="cliente"]').textContent = venta.cliente ?? '-';
-+            document.querySelector('[data-view="producto"]').textContent = venta.producto ?? '-';
-+            document.querySelector('[data-view="total"]').textContent = `$${Number(venta.total || 0).toFixed(2)}`;
-+            document.querySelector('[data-view="fecha"]').textContent = venta.fecha ?? '-';
-+        }
-+
-+        if (targetId === 'editVentaModal' && venta) {
-+            document.getElementById('editVentaId').value = venta.id ?? '';
-+            document.getElementById('editCliente').value = venta.cliente ?? '';
-+            document.getElementById('editProducto').value = venta.producto ?? '';
-+            document.getElementById('editTotal').value = venta.total ?? '';
-+        }
-+
-+        openModal(targetId);
-+    });
-+});
-+
-+closeButtons.forEach((button) => {
-+    button.addEventListener('click', () => {
-+        const modal = button.closest('.custom-modal');
-+        if (modal) closeModal(modal);
-+    });
-+});
-+
-+modals.forEach((modal) => {
-+    modal.addEventListener('click', (event) => {
-+        if (event.target === modal) {
-+            closeModal(modal);
-+        }
-+    });
-+});
- </script>
  
- </body>
- </html>
-diff --git a/app/views/products_landing.php b/app/views/products_landing.php
+         require VIEW_PATH . '/employee_detail.php';
+     }
+ 
+     public function editEmployee()
+     {
+         authRequired();
+         $this->enforcePasswordUpdated();
++        $this->enforceCorporateAccess();
+ 
+         $id = trim($_GET['id'] ?? '');
+         
+         if (empty($id)) {
+             redirect(route('dashboard', 'index'));
+         }
+ 
+         $userModel = new UserModel();
+         $user = $userModel->findById($id);
+ 
+         if (!$user) {
+             redirect(route('dashboard', 'index'));
+         }
+ 
+         require VIEW_PATH . '/edit_employee.php';
+     }
+ 
+     public function saveEditEmployee()
+     {
+         authRequired();
+         $this->enforcePasswordUpdated();
++        $this->enforceCorporateAccess();
+ 
+         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+             redirect(route('dashboard', 'index'));
+         }
+ 
+         $id = trim($_POST['id'] ?? '');
+         
+         if (empty($id)) {
+             redirect(route('dashboard', 'index'));
+         }
+ 
+         $payload = [];
+         $payload['full_name'] = trim($_POST['full_name'] ?? '');
+         $payload['email'] = trim($_POST['email'] ?? '');
+         $payload['phone'] = trim($_POST['phone'] ?? '');
+         $payload['type'] = trim($_POST['type'] ?? '');
+         $payload['department'] = trim($_POST['department'] ?? '');
+         $payload['position'] = trim($_POST['position'] ?? '');
+         $payload['hired_at'] = trim($_POST['hired_at'] ?? '');
+         $payload['status'] = trim($_POST['status'] ?? '');
+ 
+         $userModel = new UserModel();
+         $userModel->update($id, $payload);
+ 
+         $_SESSION['employee_edit_message'] = 'Empleado actualizado exitosamente.';
+diff --git a/app/views/client_products.php b/app/views/client_products.php
 new file mode 100644
-index 0000000000000000000000000000000000000000..351249b12b7fde9bc3e2761fd294ab2302d506df
+index 0000000000000000000000000000000000000000..94a5c13c867f3a5fcbafbe9bd4a153686b8b9fec
 --- /dev/null
-+++ b/app/views/products_landing.php
-@@ -0,0 +1,44 @@
++++ b/app/views/client_products.php
+@@ -0,0 +1,104 @@
 +<!DOCTYPE html>
 +<html lang="es">
 +<head>
 +    <meta charset="UTF-8">
 +    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-+    <title>Productos Electrónicos</title>
++    <title>Tienda para Clientes</title>
 +    <link rel="stylesheet" href="<?= asset('estilos.css') ?>">
-+    <link rel="stylesheet" href="<?= asset('dashboard.css') ?>">
++    <link rel="stylesheet" href="<?= asset('client_products.css') ?>">
 +    <script src="<?= asset('theme.js') ?>" defer></script>
 +</head>
-+<body>
++<body class="client-products-body">
 +<button class="theme-toggle" type="button" data-theme-toggle aria-label="Cambiar tema"></button>
-+<div class="products-landing">
-+    <section class="panel panel--wide">
-+        <h1>Landing de Productos Electrónicos</h1>
-+        <p class="subtitle">Acceso habilitado para correos distintos de Gmail. Aquí tienes una vitrina rápida de productos destacados.</p>
 +
-+        <div class="products-grid">
-+            <article class="product-card">
-+                <h4>Laptop Pro X15</h4>
-+                <p>Procesador i7, 16GB RAM y SSD de 1TB para trabajo profesional.</p>
-+            </article>
-+            <article class="product-card">
-+                <h4>Smartphone Nova 12</h4>
-+                <p>Cámara de 108MP, batería de larga duración y pantalla AMOLED.</p>
-+            </article>
-+            <article class="product-card">
-+                <h4>Audífonos SonicAir</h4>
-+                <p>Cancelación de ruido activa y autonomía de hasta 30 horas.</p>
-+            </article>
-+            <article class="product-card">
-+                <h4>Monitor UltraView 27"</h4>
-+                <p>Resolución 4K con tasa de refresco de 144Hz para alta productividad.</p>
-+            </article>
-+        </div>
++<main class="client-products-main">
++    <header class="client-products-header">
++        <h1>Tienda exclusiva para clientes</h1>
++        <p>Solo las cuentas de Gmail pueden acceder a este portal de compras.</p>
++        <a class="client-logout" href="<?= route('dashboard', 'logout') ?>">Cerrar sesión</a>
++    </header>
 +
-+        <div class="actions">
-+            <a class="btn-secondary" href="<?= route('dashboard', 'page_ventas') ?>">Ir al módulo de ventas</a>
-+            <a class="btn-primary" href="<?= route('dashboard', 'logout') ?>">Cerrar sesión</a>
-+        </div>
++    <?php if (!empty($_SESSION['client_products_success'])): ?>
++        <div class="client-alert client-alert--success"><?= htmlspecialchars($_SESSION['client_products_success']) ?></div>
++        <?php unset($_SESSION['client_products_success']); ?>
++    <?php endif; ?>
++
++    <?php if (!empty($_SESSION['client_products_error'])): ?>
++        <div class="client-alert client-alert--error"><?= htmlspecialchars($_SESSION['client_products_error']) ?></div>
++        <?php unset($_SESSION['client_products_error']); ?>
++    <?php endif; ?>
++
++    <section class="product-grid" aria-label="Catálogo de productos">
++        <article class="product-card">
++            <h2>Laptop Pro 14</h2>
++            <p>Rendimiento de alta gama para trabajo y estudio.</p>
++            <strong>S/ 4,200.00</strong>
++        </article>
++        <article class="product-card">
++            <h2>Mouse Inalámbrico</h2>
++            <p>Ergonómico, preciso y con batería de larga duración.</p>
++            <strong>S/ 90.00</strong>
++        </article>
++        <article class="product-card">
++            <h2>Teclado Mecánico</h2>
++            <p>Switches táctiles para una mejor experiencia de escritura.</p>
++            <strong>S/ 250.00</strong>
++        </article>
++        <article class="product-card">
++            <h2>Monitor 27&quot;</h2>
++            <p>Pantalla IPS ideal para productividad y diseño.</p>
++            <strong>S/ 980.00</strong>
++        </article>
 +    </section>
-+</div>
++
++    <section class="client-form-section">
++        <h2>Registrar compra</h2>
++        <form method="post" action="<?= route('dashboard', 'buyProduct') ?>">
++            <label for="cliente_nombre">Nombre del cliente</label>
++            <input id="cliente_nombre" name="cliente_nombre" type="text" required>
++
++            <label for="producto">Producto</label>
++            <select id="producto" name="producto" required>
++                <option value="Laptop Pro 14">Laptop Pro 14</option>
++                <option value="Mouse Inalámbrico">Mouse Inalámbrico</option>
++                <option value="Teclado Mecánico">Teclado Mecánico</option>
++                <option value="Monitor 27\"">Monitor 27&quot;</option>
++            </select>
++
++            <label for="cantidad">Cantidad</label>
++            <input id="cantidad" name="cantidad" type="number" min="1" value="1" required>
++
++            <button type="submit">Comprar</button>
++        </form>
++    </section>
++
++    <section class="client-orders">
++        <h2>Mis pedidos</h2>
++        <?php if (empty($misPedidos)): ?>
++            <p>Aún no has realizado compras.</p>
++        <?php else: ?>
++            <table>
++                <thead>
++                    <tr>
++                        <th>Fecha</th>
++                        <th>Producto</th>
++                        <th>Cantidad</th>
++                        <th>Total</th>
++                    </tr>
++                </thead>
++                <tbody>
++                <?php foreach ($misPedidos as $pedido): ?>
++                    <tr>
++                        <td><?= htmlspecialchars($pedido['fecha'] ?? '-') ?></td>
++                        <td><?= htmlspecialchars($pedido['producto'] ?? '-') ?></td>
++                        <td><?= (int)($pedido['cantidad'] ?? 1) ?></td>
++                        <td>S/ <?= number_format((float)($pedido['total'] ?? 0), 2) ?></td>
++                    </tr>
++                <?php endforeach; ?>
++                </tbody>
++            </table>
++        <?php endif; ?>
++    </section>
++</main>
 +</body>
 +</html>
-diff --git a/public/dashboard.css b/public/dashboard.css
-index f0cf84eadd6033fab1e59643c48c29ff11b0540d..1044762f2d121721233a33ae18f4e81e71e9b660 100644
---- a/public/dashboard.css
-+++ b/public/dashboard.css
-@@ -476,25 +476,93 @@ body[data-theme='light'] .subtab-item,
- body[data-theme='light'] .stat-card h4,
- body[data-theme='light'] .stat-card small,
- body[data-theme='light'] .profile-card p,
- body[data-theme='light'] .profile-card small {
-     color: #4a6288;
- }
- 
- body[data-theme='light'] .sidebar-link.active,
- body[data-theme='light'] .sidebar-link:hover,
- body[data-theme='light'] .tab-item.active,
- body[data-theme='light'] .subtab-item.active {
-     color: #214e96;
- }
- 
- body[data-theme='light'] .employee-modal {
-     background: rgba(255, 255, 255, 0.98);
-     border-color: #d5deec;
-     color: #39424e;
- }
- 
- body[data-theme='light'] .employee-actions .btn-secondary {
-     background: #edf4ff;
-     border-color: #b9ccea;
-     color: #2e5c8f;
- }
-+
-+.custom-modal {
-+    position: fixed;
-+    inset: 0;
-+    background: rgba(2, 8, 20, 0.72);
-+    display: none;
-+    align-items: center;
-+    justify-content: center;
-+    padding: 16px;
-+    z-index: 80;
-+}
-+
-+.custom-modal.is-open {
-+    display: flex;
-+}
-+
-+.custom-modal__box {
-+    width: min(100%, 520px);
-+    background: rgba(11, 21, 41, 0.98);
-+    border: 1px solid rgba(120, 145, 214, 0.35);
-+    border-radius: 14px;
-+    padding: 18px;
-+}
-+
-+.custom-modal__head {
-+    display: flex;
-+    justify-content: space-between;
-+    align-items: center;
-+    margin-bottom: 12px;
-+}
-+
-+.custom-modal__head h3 {
+diff --git a/public/client_products.css b/public/client_products.css
+new file mode 100644
+index 0000000000000000000000000000000000000000..d8f16217f6c4eb702fa829d7804134cb5ed49a56
+--- /dev/null
++++ b/public/client_products.css
+@@ -0,0 +1,93 @@
++.client-products-body {
++    font-family: 'Segoe UI', Tahoma, sans-serif;
 +    margin: 0;
++    background: #f5f8ff;
++    color: #1b2740;
 +}
 +
-+.custom-modal__close {
-+    width: 34px;
-+    height: 34px;
-+    border-radius: 50%;
-+    border: 1px solid rgba(131, 159, 245, 0.45);
-+    background: transparent;
-+    color: #dce8ff;
-+    font-size: 1.3rem;
++.client-products-main {
++    max-width: 1100px;
++    margin: 0 auto;
++    padding: 2rem 1rem 3rem;
++}
++
++.client-products-header {
++    display: flex;
++    flex-direction: column;
++    gap: .4rem;
++    margin-bottom: 1.5rem;
++}
++
++.client-logout {
++    width: fit-content;
++    background: #1f5eff;
++    color: #fff;
++    text-decoration: none;
++    padding: .6rem 1rem;
++    border-radius: 8px;
++}
++
++.product-grid {
++    display: grid;
++    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
++    gap: 1rem;
++    margin-bottom: 2rem;
++}
++
++.product-card,
++.client-form-section,
++.client-orders {
++    background: #fff;
++    border-radius: 12px;
++    padding: 1rem;
++    box-shadow: 0 8px 20px rgba(20, 35, 90, 0.08);
++}
++
++.client-form-section form {
++    display: grid;
++    gap: .6rem;
++}
++
++.client-form-section input,
++.client-form-section select,
++.client-form-section button {
++    padding: .65rem;
++    border-radius: 8px;
++    border: 1px solid #cfd7e8;
++    font-size: .95rem;
++}
++
++.client-form-section button {
++    background: #1f5eff;
++    color: #fff;
++    border: none;
 +    cursor: pointer;
 +}
 +
-+.products-landing {
-+    width: min(100%, 980px);
-+    margin: 0 auto;
++.client-alert {
++    border-radius: 8px;
++    padding: .7rem .9rem;
++    margin-bottom: 1rem;
 +}
 +
-+.products-grid {
-+    display: grid;
-+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-+    gap: 14px;
-+    margin-top: 16px;
++.client-alert--success {
++    background: #e7f8ee;
++    color: #116f3a;
 +}
 +
-+.product-card {
-+    background: rgba(17, 31, 58, 0.78);
-+    border: 1px solid rgba(130, 157, 242, 0.25);
-+    border-radius: 12px;
-+    padding: 14px;
++.client-alert--error {
++    background: #ffe8e8;
++    color: #9f2020;
 +}
 +
-+.product-card h4 {
-+    margin: 0 0 8px;
++.client-orders table {
++    width: 100%;
++    border-collapse: collapse;
++}
++
++.client-orders th,
++.client-orders td {
++    text-align: left;
++    padding: .6rem;
++    border-bottom: 1px solid #edf1fa;
 +}
