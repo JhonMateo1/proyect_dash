@@ -5,6 +5,29 @@ require_once MODEL_PATH . '/AuditModel.php';
 
 class DashboardController
 {
+    private function ventasFilePath()
+    {
+        return DATA_PATH . '/ventas.json';
+    }
+
+    private function loadVentas()
+    {
+        $ventasFile = $this->ventasFilePath();
+        if (!file_exists($ventasFile)) {
+            file_put_contents($ventasFile, json_encode([], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        }
+
+        return json_decode(file_get_contents($ventasFile), true) ?? [];
+    }
+
+    private function saveVentas($ventas)
+    {
+        file_put_contents(
+            $this->ventasFilePath(),
+            json_encode(array_values($ventas), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+        );
+    }
+
     private function processProfilePhotoUpload()
     {
         if (empty($_FILES['profile_photo']) || ($_FILES['profile_photo']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
@@ -210,6 +233,46 @@ class DashboardController
     {
         authRequired();
         $this->enforcePasswordUpdated();
+
+        $ventas = $this->loadVentas();
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $operation = trim($_POST['operation'] ?? 'create');
+
+            if ($operation === 'create') {
+                $cliente = trim($_POST['cliente'] ?? '');
+                $producto = trim($_POST['producto'] ?? '');
+                $total = (float) ($_POST['total'] ?? 0);
+
+                if ($cliente !== '' && $producto !== '' && $total > 0) {
+                    $ventas[] = [
+                        'id' => uniqid('vta_', true),
+                        'cliente' => $cliente,
+                        'producto' => $producto,
+                        'total' => $total,
+                        'fecha' => date('Y-m-d H:i:s'),
+                    ];
+                    $this->saveVentas($ventas);
+                }
+            }
+
+            if ($operation === 'delete') {
+                $ventaId = trim($_POST['venta_id'] ?? '');
+                $ventas = array_filter($ventas, function ($venta) use ($ventaId) {
+                    return ($venta['id'] ?? '') !== $ventaId;
+                });
+                $this->saveVentas($ventas);
+            }
+
+            redirect(route('dashboard', 'page_ventas'));
+        }
+
+        $totalMonto = 0;
+        foreach ($ventas as $venta) {
+            $totalMonto += (float) ($venta['total'] ?? 0);
+        }
+
+        $cantidadVentas = count($ventas);
 
         require VIEW_PATH . '/page_ventas.php';
     }

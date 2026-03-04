@@ -1,13 +1,64 @@
 diff --git a/app/controllers/DashboardController.php b/app/controllers/DashboardController.php
-index 96c369178355cc946612920238765ddde11c9baa..424fc739d6b0ec8ead89cb7cdfbbdd8ef39a0291 100644
+index 424fc739d6b0ec8ead89cb7cdfbbdd8ef39a0291..3950dcd9b8f356df72c0d13b3d7ec9cec6abee34 100644
 --- a/app/controllers/DashboardController.php
 +++ b/app/controllers/DashboardController.php
-@@ -184,50 +184,58 @@ class DashboardController
-             unset($_SESSION['employee_error_message']);
-         } else {
-             $_SESSION['employee_temp_password_message'] = $baseMessage;
+@@ -1,32 +1,55 @@
+ <?php
+ 
+ require_once MODEL_PATH . '/UserModel.php';
+ require_once MODEL_PATH . '/AuditModel.php';
+ 
+ class DashboardController
+ {
++    private function ventasFilePath()
++    {
++        return DATA_PATH . '/ventas.json';
++    }
++
++    private function loadVentas()
++    {
++        $ventasFile = $this->ventasFilePath();
++        if (!file_exists($ventasFile)) {
++            file_put_contents($ventasFile, json_encode([], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
++        }
++
++        return json_decode(file_get_contents($ventasFile), true) ?? [];
++    }
++
++    private function saveVentas($ventas)
++    {
++        file_put_contents(
++            $this->ventasFilePath(),
++            json_encode(array_values($ventas), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
++        );
++    }
++
+     private function processProfilePhotoUpload()
+     {
+         if (empty($_FILES['profile_photo']) || ($_FILES['profile_photo']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+             return null;
          }
  
+         $photo = $_FILES['profile_photo'];
+ 
+         if (($photo['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+             $_SESSION['employee_error_message'] = 'No se pudo cargar la foto de perfil. Intente nuevamente.';
+             return null;
+         }
+ 
+         if (($photo['size'] ?? 0) > 2 * 1024 * 1024) {
+             $_SESSION['employee_error_message'] = 'La foto de perfil supera el tamaño máximo permitido (2 MB).';
+             return null;
+         }
+ 
+         $mimeType = mime_content_type($photo['tmp_name']);
+         $allowedTypes = [
+             'image/jpeg' => 'jpg',
+             'image/png' => 'png',
+             'image/webp' => 'webp',
+             'image/gif' => 'gif',
+         ];
+@@ -189,50 +212,90 @@ class DashboardController
          redirect(route('dashboard', 'addEmployee'));
      }
  
@@ -28,14 +79,54 @@ index 96c369178355cc946612920238765ddde11c9baa..424fc739d6b0ec8ead89cb7cdfbbdd8e
          require VIEW_PATH . '/audit.php';
      }
  
-+    public function page_ventas()
-+    {
-+        authRequired();
-+        $this->enforcePasswordUpdated();
+     public function page_ventas()
+     {
+         authRequired();
+         $this->enforcePasswordUpdated();
+ 
++        $ventas = $this->loadVentas();
 +
-+        require VIEW_PATH . '/page_ventas.php';
-+    }
++        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
++            $operation = trim($_POST['operation'] ?? 'create');
 +
++            if ($operation === 'create') {
++                $cliente = trim($_POST['cliente'] ?? '');
++                $producto = trim($_POST['producto'] ?? '');
++                $total = (float) ($_POST['total'] ?? 0);
++
++                if ($cliente !== '' && $producto !== '' && $total > 0) {
++                    $ventas[] = [
++                        'id' => uniqid('vta_', true),
++                        'cliente' => $cliente,
++                        'producto' => $producto,
++                        'total' => $total,
++                        'fecha' => date('Y-m-d H:i:s'),
++                    ];
++                    $this->saveVentas($ventas);
++                }
++            }
++
++            if ($operation === 'delete') {
++                $ventaId = trim($_POST['venta_id'] ?? '');
++                $ventas = array_filter($ventas, function ($venta) use ($ventaId) {
++                    return ($venta['id'] ?? '') !== $ventaId;
++                });
++                $this->saveVentas($ventas);
++            }
++
++            redirect(route('dashboard', 'page_ventas'));
++        }
++
++        $totalMonto = 0;
++        foreach ($ventas as $venta) {
++            $totalMonto += (float) ($venta['total'] ?? 0);
++        }
++
++        $cantidadVentas = count($ventas);
++
+         require VIEW_PATH . '/page_ventas.php';
+     }
+ 
      public function viewEmployee()
      {
          authRequired();
@@ -58,169 +149,330 @@ index 96c369178355cc946612920238765ddde11c9baa..424fc739d6b0ec8ead89cb7cdfbbdd8e
          foreach ($allUsers as $u) {
              if (!empty($u['id']) && trim($u['id']) === $id) {
                  $user = $u;
-                 break;
-             }
-         }
-diff --git a/app/views/audit.php b/app/views/audit.php
-index 569f653a2675336a8781eac1d5ac3191aaf67535..4fa23e589ab85ed5723cf72acf901a4e2ec9a406 100644
---- a/app/views/audit.php
-+++ b/app/views/audit.php
-@@ -1,45 +1,46 @@
+diff --git a/app/views/page_ventas.php b/app/views/page_ventas.php
+index 26e819fe0c78c1beeeeb786e64238cd8c07cb382..39e5e42eeea8b5817a2f1fff206c13b50e35a7d5 100644
+--- a/app/views/page_ventas.php
++++ b/app/views/page_ventas.php
+@@ -1,190 +1,148 @@
  <!DOCTYPE html>
  <html lang="es">
  <head>
      <meta charset="UTF-8">
      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-     <title>Auditoría del Sistema</title>
-     <link rel="stylesheet" href="<?= asset('estilos.css') ?>">
-     <link rel="stylesheet" href="<?= asset('dashboard.css') ?>">
-     <script src="<?= asset('theme.js') ?>" defer></script>
+     <title>Módulo de Ventas</title>
++    <link rel="stylesheet" href="<?= asset('estilos.css') ?>">
++    <link rel="stylesheet" href="<?= asset('dashboard.css') ?>">
++    <script src="<?= asset('theme.js') ?>" defer></script>
+     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+-    <style>
+-        *{margin:0;padding:0;box-sizing:border-box;font-family:'Inter',sans-serif}
+-        body{background:linear-gradient(135deg,#0a192f,#0f2747);color:#fff}
+-        header{background:#081424;padding:20px 40px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 4px 20px rgba(0,0,0,.4)}
+-        h1{font-size:24px}
+-        .btn{background:#1e3a8a;border:none;padding:8px 14px;border-radius:8px;color:#fff;cursor:pointer;transition:.3s}
+-        .btn:hover{background:#2563eb}
+-        .btn-danger{background:#7f1d1d}
+-        .btn-danger:hover{background:#b91c1c}
+-        .container{padding:40px}
+-        .grid{display:grid;grid-template-columns:2fr 1fr;gap:30px}
+-        .card{background:#112240;padding:20px;border-radius:16px;box-shadow:0 8px 25px rgba(0,0,0,.4)}
+-        table{width:100%;border-collapse:collapse;margin-top:15px}
+-        th,td{padding:12px;text-align:left}
+-        th{background:#0f1f36;color:#94a3b8}
+-        tr:nth-child(even){background:#0d1b2a}
+-        tr:hover{background:#1e3a8a}
+-        input{padding:8px;border-radius:6px;border:none;background:#1e293b;color:#fff;margin-right:5px}
+-        .form-inline{margin-top:10px}
+-        .analytics-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:15px;margin-bottom:20px}
+-        .analytics-cards div{background:#0f1f36;padding:15px;border-radius:12px;text-align:center}
+-        .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);justify-content:center;align-items:center}
+-        .modal-content{background:#112240;padding:25px;border-radius:12px;width:350px}
+-        .modal-content h3{margin-bottom:10px}
+-    </style>
  </head>
- <body class="dashboard-body">
- <button class="theme-toggle" type="button" data-theme-toggle aria-label="Cambiar tema"></button>
- <div class="dashboard-layout">
-     <aside class="dashboard-sidebar">
-         <h3>Dashboard</h3>
-         <p>Panel de Administración</p>
+-<body>
+-
+-<header>
+-    <h1>Módulo de Ventas</h1>
+-    <button class="btn" onclick="openModal()">+ Nueva Venta (Modal)</button>
+-</header>
+-
+-<div class="container">
+-<div class="grid">
+-
+-    <!-- SECCIÓN CRUD -->
+-    <div class="card">
+-        <h2>Gestión de Ventas</h2>
+-
+-        <!-- OPCIÓN 1: CRUD Inline -->
+-        <div class="form-inline">
+-            <input type="text" id="cliente" placeholder="Cliente">
+-            <input type="text" id="producto" placeholder="Producto">
+-            <input type="number" id="total" placeholder="Total">
+-            <button class="btn" onclick="agregarVenta()">Agregar (Inline)</button>
+-        </div>
+-
+-        <table id="tablaVentas">
+-            <thead>
+-                <tr>
+-                    <th>ID</th>
+-                    <th>Cliente</th>
+-                    <th>Producto</th>
+-                    <th>Total</th>
+-                    <th>Acciones</th>
+-                </tr>
+-            </thead>
+-            <tbody></tbody>
+-        </table>
+-    </div>
++<body class="dashboard-body">
++<button class="theme-toggle" type="button" data-theme-toggle aria-label="Cambiar tema"></button>
++
++<div class="dashboard-layout">
++    <aside class="dashboard-sidebar">
++        <h3>Dashboard</h3>
++        <p>Panel de Administración</p>
++
++        <span class="sidebar-section">PANEL</span>
++        <a class="sidebar-link" href="<?= route('dashboard', 'index') ?>">Inicio</a>
++        <a class="sidebar-link" href="<?= route('dashboard', 'audit') ?>">Auditoría</a>
++        <a class="sidebar-link active" href="<?= route('dashboard', 'page_ventas') ?>">Ventas</a>
++
++        <span class="sidebar-section">GENERAL</span>
++        <a class="sidebar-link" href="<?= route('dashboard', 'addEmployee') ?>">Agregar empleado</a>
++        <a class="sidebar-link" href="<?= route('dashboard', 'logout') ?>">Cerrar sesión</a>
++    </aside>
++
++    <main class="dashboard-main">
++        <section class="panel panel--wide hr-panel hr-panel--fullscreen">
++            <h1>Módulo de Ventas</h1>
++
++            <div class="module-headline">
++                <h2>Gestión Comercial</h2>
++                <p>Registro de ventas y métricas generales del módulo</p>
++            </div>
  
-         <span class="sidebar-section">PANEL</span>
-         <a class="sidebar-link" href="<?= route('dashboard', 'index') ?>">Inicio</a>
-         <a class="sidebar-link active" href="<?= route('dashboard', 'audit') ?>">Auditoría</a>
-+        <a class="sidebar-link" href="<?= route('dashboard', 'page_ventas') ?>">Ventas</a>
- 
-         <span class="sidebar-section">GENERAL</span>
-         <a class="sidebar-link" href="<?= route('dashboard', 'addEmployee') ?>">Agregar empleado</a>
-         <a class="sidebar-link" href="<?= route('dashboard', 'logout') ?>">Cerrar sesión</a>
-     </aside>
- 
-     <main class="dashboard-main">
-         <section class="panel panel--wide hr-panel hr-panel--fullscreen">
-             <h1>Auditoría del sistema</h1>
-             <p class="subtitle">Registro de eventos y actividad reciente.</p>
- 
-             <div class="table-wrap table-wrap--dashboard">
-                 <table class="audit-table dashboard-table">
-                     <thead>
-                     <tr>
-                         <th>Evento</th>
-                         <th>Email</th>
-                         <th>IP</th>
-                         <th>Fecha</th>
-                         <th>Detalles</th>
-                     </tr>
-                     </thead>
-                     <tbody>
-                     <?php foreach ($logs as $log): ?>
-                         <tr>
-diff --git a/app/views/dashboard.php b/app/views/dashboard.php
-index d267ce76400164f2426f08846607f02f0d10e554..1ce6742c9efa5f85ee2ac27167f80c3995791591 100644
---- a/app/views/dashboard.php
-+++ b/app/views/dashboard.php
-@@ -1,49 +1,50 @@
- <!DOCTYPE html>
- <html lang="es">
- <head>
-     <meta charset="UTF-8">
-     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-     <title>Dashboard RRHH</title>
-     <link rel="stylesheet" href="<?= asset('estilos.css') ?>">
-     <link rel="stylesheet" href="<?= asset('dashboard.css') ?>">
-     <script src="<?= asset('theme.js') ?>" defer></script>
- </head>
- <body class="dashboard-body">
- <button class="theme-toggle" type="button" data-theme-toggle aria-label="Cambiar tema"></button>
- <?php
- $view = $_GET['view'] ?? 'table';
- $activeView = in_array($view, ['table', 'gallery'], true) ? $view : 'table';
- ?>
- <div class="dashboard-layout">
-     <aside class="dashboard-sidebar">
-         <h3>Dashboard</h3>
-         <p>Panel de Administración</p>
- 
-         <span class="sidebar-section">PANEL</span>
-         <a class="sidebar-link active" href="<?= route('dashboard', 'index') ?>">Inicio</a>
-         <a class="sidebar-link" href="<?= route('dashboard', 'audit') ?>">Auditoría</a>
-+        <a class="sidebar-link" href="<?= route('dashboard', 'page_ventas') ?>">Ventas</a>
- 
-         <span class="sidebar-section">GENERAL</span>
-         <a class="sidebar-link" href="<?= route('dashboard', 'addEmployee') ?>">Agregar empleado</a>
-         <a class="sidebar-link" href="<?= route('dashboard', 'logout') ?>">Cerrar sesión</a>
-     </aside>
- 
-     <main class="dashboard-main">
-         <section class="panel panel--wide hr-panel hr-panel--fullscreen">
-             <h1>Formulario Tabla Detallada</h1>
- 
-             <div class="module-headline">
-                 <h2>Gestión Interna (RRHH & Ops)</h2>
-                 <p>Recursos humanos, soporte al cliente y comunidad</p>
+-    <!-- SECCIÓN ANALÍTICA -->
+-    <div class="card">
+-        <h2>Panel Analítico</h2>
+-        <div class="analytics-cards">
+-            <div>
+-                <h4>Total Ventas</h4>
+-                <p id="totalVentas">$0</p>
++            <div class="stats-grid" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
++                <article class="stat-card">
++                    <h4>Total Ventas</h4>
++                    <p class="stat-value">$<?= number_format($totalMonto ?? 0, 2) ?></p>
++                    <small>Monto acumulado</small>
++                </article>
++                <article class="stat-card">
++                    <h4>N° Ventas</h4>
++                    <p class="stat-value"><?= (int) ($cantidadVentas ?? 0) ?></p>
++                    <small>Transacciones registradas</small>
++                </article>
              </div>
+-            <div>
+-                <h4>N° Ventas</h4>
+-                <p id="cantidadVentas">0</p>
++
++            <div class="module-header">
++                <div>
++                    <h3>Nueva venta</h3>
++                    <p class="subtitle">Completa los datos para registrar una operación</p>
++                </div>
+             </div>
+-        </div>
+-        <canvas id="graficoVentas"></canvas>
+-    </div>
  
-             <nav class="tab-row">
-                 <a class="tab-item active" href="<?= route('dashboard', 'index') ?>">Recursos Humanos</a>
-                 <a class="tab-item" href="#">Soporte</a>
-                 <a class="tab-item" href="#">Comunidad</a>
-             </nav>
+-</div>
+-</div>
++            <form class="filter-row" method="post" action="<?= route('dashboard', 'page_ventas') ?>" style="grid-template-columns: 1fr 1fr 1fr auto; align-items: end;">
++                <input type="hidden" name="operation" value="create">
++                <input type="text" name="cliente" placeholder="Cliente" required>
++                <input type="text" name="producto" placeholder="Producto" required>
++                <input type="number" name="total" placeholder="Total" min="0.01" step="0.01" required>
++                <button class="btn-primary btn-inline" type="submit">Agregar venta</button>
++            </form>
++
++            <div class="table-wrap table-wrap--dashboard">
++                <table class="audit-table dashboard-table">
++                    <thead>
++                    <tr>
++                        <th>ID</th>
++                        <th>Cliente</th>
++                        <th>Producto</th>
++                        <th>Total</th>
++                        <th>Fecha</th>
++                        <th>Acciones</th>
++                    </tr>
++                    </thead>
++                    <tbody>
++                    <?php if (empty($ventas ?? [])): ?>
++                        <tr>
++                            <td colspan="6">No hay ventas registradas.</td>
++                        </tr>
++                    <?php else: ?>
++                        <?php foreach (($ventas ?? []) as $venta): ?>
++                            <tr>
++                                <td><?= htmlspecialchars($venta['id'] ?? '') ?></td>
++                                <td><?= htmlspecialchars($venta['cliente'] ?? '') ?></td>
++                                <td><?= htmlspecialchars($venta['producto'] ?? '') ?></td>
++                                <td>$<?= number_format((float) ($venta['total'] ?? 0), 2) ?></td>
++                                <td><?= htmlspecialchars($venta['fecha'] ?? '-') ?></td>
++                                <td>
++                                    <form method="post" action="<?= route('dashboard', 'page_ventas') ?>" style="display:inline;">
++                                        <input type="hidden" name="operation" value="delete">
++                                        <input type="hidden" name="venta_id" value="<?= htmlspecialchars($venta['id'] ?? '') ?>">
++                                        <button class="btn-secondary btn-inline" type="submit">Eliminar</button>
++                                    </form>
++                                </td>
++                            </tr>
++                        <?php endforeach; ?>
++                    <?php endif; ?>
++                    </tbody>
++                </table>
++            </div>
  
-             <div class="subtab-row">
-                 <a class="subtab-item active" href="<?= route('dashboard', 'index') ?>">Personal</a>
-                 <a class="subtab-item" href="<?= route('dashboard', 'index') ?>">Desempeño</a>
-                 <a class="subtab-item" href="<?= route('dashboard', 'index') ?>">Objetivos</a>
-diff --git a/app/views/employee_detail.php b/app/views/employee_detail.php
-index 9eec4094e692d2fee19b01afd7d418571478fc61..92252c4d2ec26342163ef936e11356653cecb2a1 100644
---- a/app/views/employee_detail.php
-+++ b/app/views/employee_detail.php
-@@ -134,51 +134,51 @@
-                 height: 80px;
-                 font-size: 2rem;
-             }
+-<!-- OPCIÓN 2: CRUD con Modal -->
+-<div class="modal" id="modalVenta">
+-    <div class="modal-content">
+-        <h3>Nueva Venta</h3>
+-        <input type="text" id="mCliente" placeholder="Cliente"><br><br>
+-        <input type="text" id="mProducto" placeholder="Producto"><br><br>
+-        <input type="number" id="mTotal" placeholder="Total"><br><br>
+-        <button class="btn" onclick="guardarDesdeModal()">Guardar</button>
+-        <button class="btn btn-danger" onclick="closeModal()">Cancelar</button>
+-    </div>
++            <div class="panel" style="width:100%; max-width:100%; margin-top:16px; padding:18px;">
++                <h3 style="margin-top:0;">Panel analítico</h3>
++                <canvas id="graficoVentas" height="120"></canvas>
++            </div>
++        </section>
++    </main>
+ </div>
  
-             .employee-header-info h2 {
-                 font-size: 1.5rem;
-             }
+ <script>
+-let ventas = [];
+-let contador = 1;
+-
+-function agregarVenta(clienteParam, productoParam, totalParam){
+-    let cliente = clienteParam || document.getElementById('cliente').value;
+-    let producto = productoParam || document.getElementById('producto').value;
+-    let total = parseFloat(totalParam || document.getElementById('total').value);
+-
+-    if(!cliente || !producto || !total) return;
+-
+-    ventas.push({id:contador++, cliente, producto, total});
+-    renderTabla();
+-    actualizarAnalitica();
+-
+-    document.getElementById('cliente').value='';
+-    document.getElementById('producto').value='';
+-    document.getElementById('total').value='';
+-}
+-
+-function renderTabla(){
+-    const tbody = document.querySelector('#tablaVentas tbody');
+-    tbody.innerHTML='';
+-    ventas.forEach(v=>{
+-        tbody.innerHTML += `
+-        <tr>
+-            <td>${v.id}</td>
+-            <td>${v.cliente}</td>
+-            <td>${v.producto}</td>
+-            <td>$${v.total}</td>
+-            <td>
+-                <button class="btn" onclick="editarVenta(${v.id})">Editar</button>
+-                <button class="btn btn-danger" onclick="eliminarVenta(${v.id})">Eliminar</button>
+-            </td>
+-        </tr>`;
+-    });
+-}
+-
+-function eliminarVenta(id){
+-    ventas = ventas.filter(v=>v.id!==id);
+-    renderTabla();
+-    actualizarAnalitica();
+-}
+-
+-function editarVenta(id){
+-    const venta = ventas.find(v=>v.id===id);
+-    const nuevoCliente = prompt('Cliente:', venta.cliente);
+-    const nuevoProducto = prompt('Producto:', venta.producto);
+-    const nuevoTotal = prompt('Total:', venta.total);
+-    if(nuevoCliente && nuevoProducto && nuevoTotal){
+-        venta.cliente = nuevoCliente;
+-        venta.producto = nuevoProducto;
+-        venta.total = parseFloat(nuevoTotal);
+-        renderTabla();
+-        actualizarAnalitica();
+-    }
+-}
+-
+-function actualizarAnalitica(){
+-    const total = ventas.reduce((acc,v)=>acc+v.total,0);
+-    document.getElementById('totalVentas').innerText='$'+total;
+-    document.getElementById('cantidadVentas').innerText=ventas.length;
+-
+-    grafico.data.labels = ventas.map(v=>v.producto);
+-    grafico.data.datasets[0].data = ventas.map(v=>v.total);
+-    grafico.update();
+-}
+-
+-function openModal(){document.getElementById('modalVenta').style.display='flex';}
+-function closeModal(){document.getElementById('modalVenta').style.display='none';}
+-function guardarDesdeModal(){
+-    agregarVenta(
+-        document.getElementById('mCliente').value,
+-        document.getElementById('mProducto').value,
+-        document.getElementById('mTotal').value
+-    );
+-    closeModal();
+-}
++const ventasData = <?= json_encode($ventas ?? [], JSON_UNESCAPED_UNICODE) ?>;
++const etiquetas = ventasData.map(v => v.producto || 'Producto');
++const montos = ventasData.map(v => Number(v.total || 0));
  
-             .detail-grid {
-                 gap: 1rem;
-                 grid-template-columns: 1fr;
-             }
-         }
-     </style>
- </head>
- <body class="dashboard-body">
- <button class="theme-toggle" type="button" data-theme-toggle aria-label="Cambiar tema"></button>
+ const ctx = document.getElementById('graficoVentas');
+-const grafico = new Chart(ctx,{
+-    type:'bar',
+-    data:{labels:[],datasets:[{label:'Ventas por Producto',data:[]}]},
+-    options:{responsive:true,plugins:{legend:{labels:{color:'white'}}},scales:{x:{ticks:{color:'white'}},y:{ticks:{color:'white'}}}}
++new Chart(ctx, {
++    type: 'bar',
++    data: {
++        labels: etiquetas,
++        datasets: [{
++            label: 'Ventas por producto',
++            data: montos,
++            backgroundColor: 'rgba(92, 160, 255, 0.45)',
++            borderColor: 'rgba(92, 160, 255, 1)',
++            borderWidth: 1
++        }]
++    },
++    options: {
++        responsive: true,
++        plugins: {
++            legend: {
++                labels: { color: '#dce8ff' }
++            }
++        },
++        scales: {
++            x: { ticks: { color: '#bcd1f5' } },
++            y: { ticks: { color: '#bcd1f5' } }
++        }
++    }
+ });
+ </script>
  
- <div class="dashboard-layout">
-     <aside class="dashboard-sidebar">
-         <h3>Dashboard</h3>
-         <p>Panel de Administración</p>
- 
-         <span class="sidebar-section">PANEL</span>
-         <a class="sidebar-link" href="<?= route('dashboard', 'index') ?>">Inicio</a>
--        <a class="sidebar-link" href="<?= route('dashboard', 'page_ventas') ?>">ventas</a>
-+        <a class="sidebar-link" href="<?= route('dashboard', 'page_ventas') ?>">Ventas</a>
-         <a class="sidebar-link" href="<?= route('dashboard', 'audit') ?>">Auditoría</a>
-         <span class="sidebar-section">GENERAL</span>
-         <a class="sidebar-link" href="<?= route('dashboard', 'addEmployee') ?>">Agregar empleado</a>
-         <a class="sidebar-link" href="<?= route('dashboard', 'logout') ?>">Cerrar sesión</a>
-     </aside>
- 
-     <main class="dashboard-main">
-         <section class="panel panel--wide hr-panel hr-panel--fullscreen">
-             <?php if (isset($user) && $user): ?>
-                 <h1>Información del Empleado</h1>
- 
-                 <div class="employee-detail-card">
-                     <!-- Encabezado con avatar y nombre -->
-                     <div class="employee-header">
-                         <div class="employee-avatar"><?= strtoupper(substr($user['name'] ?? 'U', 0, 1)) ?></div>
-                         <div class="employee-header-info">
-                             <h2><?= htmlspecialchars($user['name'] ?? 'N/A') ?></h2>
-                             <p><?= htmlspecialchars($user['type'] ?? 'N/A') ?></p>
-                         </div>
-                     </div>
- 
-                     <!-- Información de Contacto -->
-                     <h3 style="font-size: 1.1rem; color: var(--text-secondary, #666); font-weight: 700; margin-top: 2rem; margin-bottom: 1rem;">Información de Contacto</h3>
-                     <div class="detail-grid">
-                         <div class="detail-item">
+ </body>
+ </html>
+diff --git a/data/ventas.json b/data/ventas.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..fe51488c7066f6687ef680d6bfaa4f7768ef205c
+--- /dev/null
++++ b/data/ventas.json
+@@ -0,0 +1 @@
++[]
