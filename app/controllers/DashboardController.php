@@ -348,7 +348,8 @@ class DashboardController
             redirect(route('dashboard', 'index'));
         }
 
-        require VIEW_PATH . '/products_landing.php';
+        //require VIEW_PATH . '/products_landing.php';
+        require VIEW_PATH . '/dashboard.php';
     }
 
     public function viewEmployee()

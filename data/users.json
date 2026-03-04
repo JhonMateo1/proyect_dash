@@ -365,5 +365,20 @@
         "password": "$2y$10$38zLudpU85w3m1JLa9Tvs.yyyZehp5vmkMoa4\/vaa4wNX53JEV4p2",
         "must_change_password": true,
         "created_at": "2026-02-27 21:42:29"
+    },
+    {
+        "id": "69a864000b1ae",
+        "name": "juam",
+        "email": "test@test.com",
+        "phone": "965787554",
+        "type": "Instructor",
+        "department": "Administracion",
+        "position": "Instructor Senior",
+        "hired_at": "2026-03-23",
+        "status": "Activo",
+        "photo_url": null,
+        "password": "$2y$10$4G0Sd6LR.HGweNcziI\/yaetkFJ95XvOzgl.QtHS\/C8IWTOGhpmFR.",
+        "must_change_password": true,
+        "created_at": "2026-03-04 11:55:28"
     }
 ]
