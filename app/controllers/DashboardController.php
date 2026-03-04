@@ -206,6 +206,14 @@ class DashboardController
         require VIEW_PATH . '/audit.php';
     }
 
+    public function page_ventas()
+    {
+        authRequired();
+        $this->enforcePasswordUpdated();
+
+        require VIEW_PATH . '/page_ventas.php';
+    }
+
     public function viewEmployee()
     {
         authRequired();

@@ -18,6 +18,7 @@
         <span class="sidebar-section">PANEL</span>
         <a class="sidebar-link" href="<?= route('dashboard', 'index') ?>">Inicio</a>
         <a class="sidebar-link active" href="<?= route('dashboard', 'audit') ?>">Auditoría</a>
+        <a class="sidebar-link" href="<?= route('dashboard', 'page_ventas') ?>">Ventas</a>
 
         <span class="sidebar-section">GENERAL</span>
         <a class="sidebar-link" href="<?= route('dashboard', 'addEmployee') ?>">Agregar empleado</a>
