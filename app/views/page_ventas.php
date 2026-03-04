@@ -51,18 +51,11 @@
 
             <div class="module-header">
                 <div>
-                    <h3>Nueva venta</h3>
-                    <p class="subtitle">Completa los datos para registrar una operación</p>
+                    <h3>Ventas registradas</h3>
+                    <p class="subtitle">Ahora puedes agregar, ver y editar ventas desde modales</p>
                 </div>
+                <button class="btn-primary btn-inline" type="button" data-open-modal="createVentaModal">Agregar nueva venta</button>
             </div>
-
-            <form class="filter-row" method="post" action="<?= route('dashboard', 'page_ventas') ?>" style="grid-template-columns: 1fr 1fr 1fr auto; align-items: end;">
-                <input type="hidden" name="operation" value="create">
-                <input type="text" name="cliente" placeholder="Cliente" required>
-                <input type="text" name="producto" placeholder="Producto" required>
-                <input type="number" name="total" placeholder="Total" min="0.01" step="0.01" required>
-                <button class="btn-primary btn-inline" type="submit">Agregar venta</button>
-            </form>
 
             <div class="table-wrap table-wrap--dashboard">
                 <table class="audit-table dashboard-table">
@@ -84,15 +77,21 @@
                     <?php else: ?>
                         <?php foreach (($ventas ?? []) as $venta): ?>
                             <tr>
-                                <td><?= htmlspecialchars($venta['id'] ?? '') ?></td>
+                                <td><?= (int) ($venta['id'] ?? 0) ?></td>
                                 <td><?= htmlspecialchars($venta['cliente'] ?? '') ?></td>
                                 <td><?= htmlspecialchars($venta['producto'] ?? '') ?></td>
                                 <td>$<?= number_format((float) ($venta['total'] ?? 0), 2) ?></td>
                                 <td><?= htmlspecialchars($venta['fecha'] ?? '-') ?></td>
                                 <td>
+                                    <button class="btn-secondary btn-inline" type="button"
+                                            data-open-modal="viewVentaModal"
+                                            data-venta='<?= json_encode($venta, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>'>Ver</button>
+                                    <button class="btn-primary btn-inline" type="button"
+                                            data-open-modal="editVentaModal"
+                                            data-venta='<?= json_encode($venta, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>'>Editar</button>
                                     <form method="post" action="<?= route('dashboard', 'page_ventas') ?>" style="display:inline;">
                                         <input type="hidden" name="operation" value="delete">
-                                        <input type="hidden" name="venta_id" value="<?= htmlspecialchars($venta['id'] ?? '') ?>">
+                                        <input type="hidden" name="venta_id" value="<?= (int) ($venta['id'] ?? 0) ?>">
                                         <button class="btn-secondary btn-inline" type="submit">Eliminar</button>
                                     </form>
                                 </td>
@@ -109,6 +108,55 @@
             </div>
         </section>
     </main>
+</div>
+
+<div class="custom-modal" id="createVentaModal" aria-hidden="true">
+    <div class="custom-modal__box">
+        <div class="custom-modal__head">
+            <h3>Agregar nueva venta</h3>
+            <button type="button" class="custom-modal__close" data-close-modal>&times;</button>
+        </div>
+        <form class="form-grid" method="post" action="<?= route('dashboard', 'page_ventas') ?>">
+            <input type="hidden" name="operation" value="create">
+            <div class="field"><label>Cliente</label><input type="text" name="cliente" required></div>
+            <div class="field"><label>Producto</label><input type="text" name="producto" required></div>
+            <div class="field"><label>Total</label><input type="number" name="total" min="0.01" step="0.01" required></div>
+            <button class="btn-primary" type="submit">Guardar venta</button>
+        </form>
+    </div>
+</div>
+
+<div class="custom-modal" id="viewVentaModal" aria-hidden="true">
+    <div class="custom-modal__box">
+        <div class="custom-modal__head">
+            <h3>Detalle de venta</h3>
+            <button type="button" class="custom-modal__close" data-close-modal>&times;</button>
+        </div>
+        <ul class="info-list">
+            <li><strong>ID:</strong> <span data-view="id"></span></li>
+            <li><strong>Cliente:</strong> <span data-view="cliente"></span></li>
+            <li><strong>Producto:</strong> <span data-view="producto"></span></li>
+            <li><strong>Total:</strong> <span data-view="total"></span></li>
+            <li><strong>Fecha:</strong> <span data-view="fecha"></span></li>
+        </ul>
+    </div>
+</div>
+
+<div class="custom-modal" id="editVentaModal" aria-hidden="true">
+    <div class="custom-modal__box">
+        <div class="custom-modal__head">
+            <h3>Editar venta</h3>
+            <button type="button" class="custom-modal__close" data-close-modal>&times;</button>
+        </div>
+        <form class="form-grid" method="post" action="<?= route('dashboard', 'page_ventas') ?>">
+            <input type="hidden" name="operation" value="update">
+            <input type="hidden" name="venta_id" id="editVentaId">
+            <div class="field"><label>Cliente</label><input type="text" name="cliente" id="editCliente" required></div>
+            <div class="field"><label>Producto</label><input type="text" name="producto" id="editProducto" required></div>
+            <div class="field"><label>Total</label><input type="number" name="total" id="editTotal" min="0.01" step="0.01" required></div>
+            <button class="btn-primary" type="submit">Actualizar venta</button>
+        </form>
+    </div>
 </div>
 
 <script>
@@ -141,6 +189,62 @@ new Chart(ctx, {
             y: { ticks: { color: '#bcd1f5' } }
         }
     }
+});
+
+const modals = document.querySelectorAll('.custom-modal');
+const openButtons = document.querySelectorAll('[data-open-modal]');
+const closeButtons = document.querySelectorAll('[data-close-modal]');
+
+function openModal(id) {
+    const modal = document.getElementById(id);
+    if (!modal) return;
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+}
+
+function closeModal(modal) {
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+}
+
+openButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+        const targetId = button.getAttribute('data-open-modal');
+        const ventaRaw = button.getAttribute('data-venta');
+        const venta = ventaRaw ? JSON.parse(ventaRaw) : null;
+
+        if (targetId === 'viewVentaModal' && venta) {
+            document.querySelector('[data-view="id"]').textContent = venta.id ?? '-';
+            document.querySelector('[data-view="cliente"]').textContent = venta.cliente ?? '-';
+            document.querySelector('[data-view="producto"]').textContent = venta.producto ?? '-';
+            document.querySelector('[data-view="total"]').textContent = `$${Number(venta.total || 0).toFixed(2)}`;
+            document.querySelector('[data-view="fecha"]').textContent = venta.fecha ?? '-';
+        }
+
+        if (targetId === 'editVentaModal' && venta) {
+            document.getElementById('editVentaId').value = venta.id ?? '';
+            document.getElementById('editCliente').value = venta.cliente ?? '';
+            document.getElementById('editProducto').value = venta.producto ?? '';
+            document.getElementById('editTotal').value = venta.total ?? '';
+        }
+
+        openModal(targetId);
+    });
+});
+
+closeButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+        const modal = button.closest('.custom-modal');
+        if (modal) closeModal(modal);
+    });
+});
+
+modals.forEach((modal) => {
+    modal.addEventListener('click', (event) => {
+        if (event.target === modal) {
+            closeModal(modal);
+        }
+    });
 });
 </script>
 

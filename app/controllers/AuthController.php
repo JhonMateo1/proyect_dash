@@ -7,6 +7,14 @@ require_once APP_PATH . '/services/MailerService.php';
 
 class AuthController
 {
+    private function isNonGmailEmail($email)
+    {
+        $parts = explode('@', (string)$email);
+        $domain = strtolower(trim($parts[1] ?? ''));
+
+        return $domain !== 'gmail.com';
+    }
+
     private function isPasswordValidForUser($plainPassword, $storedPassword)
     {
         if ($storedPassword === null || $storedPassword === '') {
@@ -100,6 +108,7 @@ class AuthController
         $audit->log('EVENT_LOGIN', $email, 'Login exitoso');
 
         $_SESSION['user_id'] = $email;
+        $_SESSION['is_non_gmail_user'] = $this->isNonGmailEmail($email);
         unset($_SESSION['otp_email']);
 
         $userModel = new UserModel();
@@ -107,6 +116,10 @@ class AuthController
 
         if (!empty($user['must_change_password'])) {
             redirect(route('auth', 'changePasswordRequired'));
+        }
+
+        if (!empty($_SESSION['is_non_gmail_user'])) {
+            redirect(route('dashboard', 'productsLanding'));
         }
 
         redirect(route('dashboard', 'index'));

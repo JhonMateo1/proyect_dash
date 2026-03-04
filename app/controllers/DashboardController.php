@@ -5,6 +5,29 @@ require_once MODEL_PATH . '/AuditModel.php';
 
 class DashboardController
 {
+    private function isNonGmailUser()
+    {
+        $email = (string)($_SESSION['user_id'] ?? '');
+        $parts = explode('@', $email);
+        $domain = strtolower(trim($parts[1] ?? ''));
+
+        return $domain !== '' && $domain !== 'gmail.com';
+    }
+
+    private function nextVentaId($ventas)
+    {
+        $maxId = 0;
+
+        foreach ($ventas as $venta) {
+            $id = (int)($venta['id'] ?? 0);
+            if ($id > $maxId) {
+                $maxId = $id;
+            }
+        }
+
+        return $maxId + 1;
+    }
+
     private function ventasFilePath()
     {
         return DATA_PATH . '/ventas.json';
@@ -118,6 +141,10 @@ class DashboardController
     {
         authRequired();
         $this->enforcePasswordUpdated();
+
+        if ($this->isNonGmailUser()) {
+            redirect(route('dashboard', 'productsLanding'));
+        }
 
         $email = $_SESSION['user_id'];
 
@@ -236,6 +263,15 @@ class DashboardController
 
         $ventas = $this->loadVentas();
 
+        $normalizedVentas = [];
+        foreach ($ventas as $index => $venta) {
+            $venta['id'] = $index + 1;
+            $normalizedVentas[] = $venta;
+        }
+
+        $ventas = $normalizedVentas;
+        $this->saveVentas($ventas);
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $operation = trim($_POST['operation'] ?? 'create');
 
@@ -246,7 +282,7 @@ class DashboardController
 
                 if ($cliente !== '' && $producto !== '' && $total > 0) {
                     $ventas[] = [
-                        'id' => uniqid('vta_', true),
+                        'id' => $this->nextVentaId($ventas),
                         'cliente' => $cliente,
                         'producto' => $producto,
                         'total' => $total,
@@ -256,11 +292,37 @@ class DashboardController
                 }
             }
 
+            if ($operation === 'update') {
+                $ventaId = (int)($_POST['venta_id'] ?? 0);
+                $cliente = trim($_POST['cliente'] ?? '');
+                $producto = trim($_POST['producto'] ?? '');
+                $total = (float) ($_POST['total'] ?? 0);
+
+                if ($ventaId > 0 && $cliente !== '' && $producto !== '' && $total > 0) {
+                    foreach ($ventas as &$venta) {
+                        if ((int)($venta['id'] ?? 0) === $ventaId) {
+                            $venta['cliente'] = $cliente;
+                            $venta['producto'] = $producto;
+                            $venta['total'] = $total;
+                            break;
+                        }
+                    }
+                    unset($venta);
+                    $this->saveVentas($ventas);
+                }
+            }
+
             if ($operation === 'delete') {
-                $ventaId = trim($_POST['venta_id'] ?? '');
+                $ventaId = (int)($_POST['venta_id'] ?? 0);
                 $ventas = array_filter($ventas, function ($venta) use ($ventaId) {
-                    return ($venta['id'] ?? '') !== $ventaId;
+                    return (int)($venta['id'] ?? 0) !== $ventaId;
                 });
+
+                $ventas = array_values($ventas);
+                foreach ($ventas as $index => &$venta) {
+                    $venta['id'] = $index + 1;
+                }
+                unset($venta);
                 $this->saveVentas($ventas);
             }
 
@@ -275,6 +337,18 @@ class DashboardController
         $cantidadVentas = count($ventas);
 
         require VIEW_PATH . '/page_ventas.php';
+    }
+
+    public function productsLanding()
+    {
+        authRequired();
+        $this->enforcePasswordUpdated();
+
+        if (!$this->isNonGmailUser()) {
+            redirect(route('dashboard', 'index'));
+        }
+
+        require VIEW_PATH . '/products_landing.php';
     }
 
     public function viewEmployee()
