@@ -142,10 +142,6 @@ class DashboardController
         authRequired();
         $this->enforcePasswordUpdated();
 
-        if ($this->isNonGmailUser()) {
-            redirect(route('dashboard', 'productsLanding'));
-        }
-
         $email = $_SESSION['user_id'];
 
         $userModel = new UserModel();
@@ -341,15 +337,7 @@ class DashboardController
 
     public function productsLanding()
     {
-        authRequired();
-        $this->enforcePasswordUpdated();
-
-        if (!$this->isNonGmailUser()) {
-            redirect(route('dashboard', 'index'));
-        }
-
-        //require VIEW_PATH . '/products_landing.php';
-        require VIEW_PATH . '/dashboard.php';
+        $this->index();
     }
 
     public function viewEmployee()
